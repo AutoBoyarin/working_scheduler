@@ -1,65 +1,9 @@
 version: "3.9"
 
 services:
-  db:
-    image: postgres:15
-    container_name: ws_db
-    environment:
-      POSTGRES_DB: ${DB_NAME}
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    ports:
-      - "5432:5432"
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  minio:
-    image: minio/minio
-    container_name: ws_minio
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
-    ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # Console
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/ready"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-
-  mc:
-    image: minio/mc
-    container_name: ws_minio_mc
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: ["/bin/sh", "-c"]
-    command: >-
-      "mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY} && \
-       mc mb -p local/${MINIO_SYSTEM_BUCKET} || true && \
-       mc mb -p local/${MINIO_CLIENT_BUCKET} || true && \
-       if [ "${MINIO_CLIENT_PUBLIC_ACCESS}" = "true" ]; then mc anonymous set download local/${MINIO_CLIENT_BUCKET} || true; fi"
-    restart: "no"
-
   app:
     build: .
     container_name: ws_app
-    depends_on:
-      db:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-      mc:
-        condition: service_completed_successfully
     environment:
       # Database
       DB_HOST: db
@@ -84,8 +28,18 @@ services:
     volumes:
       - app_output:/app/src/image_moderator/output
     restart: unless-stopped
+    env_file:
+      - path: .env
+        required: true
+    networks:
+      - backend
+
 
 volumes:
   pg_data:
   minio_data:
   app_output:
+
+networks:
+  backend:
+    external: true
