@@ -5,7 +5,7 @@ apps:
       DB_USER: advertisment
       DB_HOST: "192.168.0.8"
       DB_PORT: "5432"
-      DB_NAME: advertisment
+      DB_NAME: advertisement
 
       MINIO_CLIENT_PUBLIC_ACESS: 'true'
       MINIO_INTERNAL_URL: 'https://s3.twcstorage.ru'
