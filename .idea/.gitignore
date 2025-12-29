@@ -13,3 +13,6 @@
 /inspectionProfiles/profiles_settings.xml
 /vcs.xml
 /working_sheduler.iml
+/sqldialects.xml
+/dataSources.xml
+/data_source_mapping.xml

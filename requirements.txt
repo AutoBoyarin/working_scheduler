@@ -1,0 +1,6 @@
+ultralytics>=8.0.0
+opencv-python>=4.8.0
+onnxruntime>=1.16.0
+requests>=2.31.0
+minio>=7.2.0
+psycopg[binary]>=3.1.8
