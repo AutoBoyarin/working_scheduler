@@ -56,6 +56,9 @@ class AppConfig:
     commit_results: bool = False
     # Интервал периодического запуска в минутах (0 — однократно)
     scheduler_interval_minutes: int = 0
+    # Пути
+    model_path: str = ""
+    output_folder: str = ""
 
 
 def load_config() -> AppConfig:
@@ -122,6 +125,12 @@ def load_config() -> AppConfig:
     commit_results = _str_to_bool(os.environ.get("COMMIT_RESULTS"), False)
     scheduler_interval_minutes = int(os.environ.get("SCHEDULER_INTERVAL_MINUTES", "0"))
 
+    # Пути (с дефолтами относительно src)
+    default_output = os.path.join(root, "image_moderator", "output")
+    default_model = os.path.join(root, "image_moderator", "models", "license-plate-finetune-v1l.onnx")
+    model_path = os.environ.get("MODEL_PATH", default_model)
+    output_folder = os.environ.get("OUTPUT_FOLDER", default_output)
+
     return AppConfig(
         db=db_cfg,
         minio=minio_cfg,
@@ -129,4 +138,6 @@ def load_config() -> AppConfig:
         clean_output_on_start=clean_output_on_start,
         commit_results=commit_results,
         scheduler_interval_minutes=scheduler_interval_minutes,
+        model_path=model_path,
+        output_folder=output_folder,
     )

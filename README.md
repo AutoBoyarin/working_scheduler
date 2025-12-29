@@ -1,164 +1,3 @@
-# Working Scheduler — модерация объявлений (текст + изображения)
-
-Проект выполняет пакетную модерацию объявлений:
-- текст — проверяется простыми правилами (см. `src/text_moderator`),
-- изображения — закрываются области с номерными знаками с помощью модели YOLO (см. `src/image_moderator`).
-
-Результаты сохраняются в PostgreSQL, а обработанные изображения выгружаются в MinIO.
-
-
-## Требования
-- Windows 10/11 или Linux/macOS
-- Python 3.10+ (рекомендуется 3.10–3.11)
-- Доступ к PostgreSQL
-- Доступ к MinIO (или совместимому S3)
-
-
-## Установка
-1. Клонировать репозиторий.
-2. Создать виртуальное окружение и установить зависимости.
-
-Windows (PowerShell):
-# Лимит пачки объявлений за запуск
-BATCH_LIMIT=50
-
-# Очищать папку вывода при старте (output)
-CLEAN_OUTPUT_ON_START=false
-
-# Коммитить результаты модерации в таблицу объявлений
-COMMIT_RESULTS=false
-
-# Периодический запуск (минуты). 0 — однократный запуск
-SCHEDULER_INTERVAL_MINUTES=0
-```
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -U pip
-pip install -r requirements.txt
-```
-
-Linux/macOS:
-```
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -U pip
-pip install -r requirements.txt
-```
-
-
-## Настройка окружения
-Переменные окружения читаются из файлов `src/.env` и `src/.env.local` (локальный файл имеет приоритет). Создайте `src/.env.local` по примеру ниже:
-
-```
-# PostgreSQL
-DB_HOST=127.0.0.1
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=postgres
-DB_NAME=moderation
-
-# MinIO
-MINIO_INTERNAL_URL=http://127.0.0.1:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
-MINIO_SYSTEM_BUCKET=system
-MINIO_CLIENT_BUCKET=client
-MINIO_CLIENT_PUBLIC_ACCESS=true
-
-# Лимит пачки объявлений за запуск
-BATCH_LIMIT=50
-
-# Очищать папку вывода при старте (output)
-CLEAN_OUTPUT_ON_START=false
-
-# Коммитить результаты модерации в таблицу объявлений
-COMMIT_RESULTS=false
-```
-
-Пояснения:
-- если какой‑то параметр не задан, приложение завершится с ошибкой с указанием отсутствующей переменной;
-- `MINIO_CLIENT_PUBLIC_ACCESS=true` включит публичный доступ (read-only) для объекта в бакете клиента;
-- таблицы в БД будут созданы автоматически при первом запуске (`init_db`).
- - `CLEAN_OUTPUT_ON_START=true` — при каждом запуске будет полностью удаляться папка `OUTPUT_FOLDER` (см. `src/ad_moderator.py`) и создаваться заново. Полезно для чистых прогонов; по умолчанию — `false`.
- - `COMMIT_RESULTS=true` — после завершения модерации каждого объявления (только если текущий статус `PAID`) приложение:
-   - установит статус `REJECTED`, если текстовая модерация выявила нарушения (есть детекции с `type="text"`);
-   - иначе установит статус `MODERATED`.
-   В обоих случаях поле `moderated_at` будет установлено в `NOW()`. По умолчанию — `false`.
- - `SCHEDULER_INTERVAL_MINUTES` — если значение > 0, приложение будет запускаться в бесконечном цикле с паузой указанного размера (в минутах). `0` — однократный запуск.
-
-
-## Модель и пути к файлам
-В `src/ad_moderator.py` заданы абсолютные пути по умолчанию:
-
-```
-OUTPUT_FOLDER = C:\Code\Python\working_sheduler\src\image_moderator\output
-MODEL_PATH   = C:\Code\Python\working_sheduler\src\image_moderator\models\license-plate-finetune-v1l.onnx
-```
-
-При необходимости измените их под свою среду (на Windows — экранируйте обратные слэши или используйте raw-строки в коде).
-
-
-## Запуск проекта
-Из корня репозитория:
-
-Windows (PowerShell):
-```
-.\.venv\Scripts\Activate.ps1
-python -m src.ad_moderator
-```
-
-Linux/macOS:
-```
-source .venv/bin/activate
-python -m src.ad_moderator
-```
-
-Альтернативно можно запустить файл напрямую:
-```
-python src\ad_moderator.py    # Windows
-python src/ad_moderator.py    # Linux/macOS
-```
-
-## Периодический запуск
-Есть два способа задать периодичность:
-
-1) Через переменную окружения (`.env.local`):
-```
-SCHEDULER_INTERVAL_MINUTES=5
-```
-Запуск без аргументов запустит модерацию каждые 5 минут:
-```
-python -m src.ad_moderator
-```
-
-2) Через CLI-флаг (имеет приоритет над .env):
-```
-python -m src.ad_moderator -i 5
-```
-Если указать `-i`, он переопределит значение из `SCHEDULER_INTERVAL_MINUTES`.
-
-### Запуск в фоне (Windows PowerShell)
-- Одноразовый фоновый процесс в текущей сессии PowerShell:
-```
-Start-Job -ScriptBlock { python -m src.ad_moderator -i 5 }
-```
-Проверить: `Get-Job`; логи можно направить в файлы:
-```
-Start-Process -FilePath python -ArgumentList "-m src.ad_moderator -i 5" -WindowStyle Hidden -RedirectStandardOutput .\moderator.log -RedirectStandardError .\moderator.err -NoNewWindow
-```
-
-- Постоянный запуск через Планировщик заданий (Task Scheduler):
-  - Способ А (через .env):
-    - В `.env.local`: `SCHEDULER_INTERVAL_MINUTES=5`
-    - Program/script: `python`
-    - Arguments: `-m src.ad_moderator`
-    - Start in: путь к корню проекта
-  - Способ Б (через CLI):
-    - Program/script: `python`
-    - Arguments: `-m src.ad_moderator -i 5`
-    - Start in: путь к корню проекта
-
-Что происходит при запуске:
 1. Загружается конфигурация из `.env`/`.env.local`.
 2. Инициализируется PostgreSQL (создаются необходимые таблицы) и клиент MinIO.
 3. Из БД выбирается пачка платных объявлений (`BATCH_LIMIT`).
@@ -191,3 +30,59 @@ Start-Process -FilePath python -ArgumentList "-m src.ad_moderator -i 5" -WindowS
 
 ## Лицензия
 Если лицензия требуется, добавьте соответствующий раздел и файл `LICENSE`.
+
+## Запуск в Docker (docker-compose)
+В репозитории есть `Dockerfile` и `docker-compose.yml`, которые поднимают:
+- `db` — PostgreSQL 15,
+- `minio` — MinIO (S3-совместимое хранилище) + `mc` для инициализации бакетов,
+- `app` — само приложение.
+
+### 1) Подготовить переменные окружения
+Создайте файл `.env` в корне проекта (или скопируйте `.env.docker.example` при наличии) со значениями, например:
+
+```
+# PostgreSQL
+DB_NAME=advertisement
+DB_USER=autoboyarin
+DB_PASSWORD=secret
+
+# MinIO
+MINIO_ACCESS_KEY=ROOTNAME
+MINIO_SECRET_KEY=CHANGEME123
+MINIO_SYSTEM_BUCKET=autoboyarin
+MINIO_CLIENT_BUCKET=autoboyarin-client
+MINIO_CLIENT_PUBLIC_ACCESS=true
+
+# Приложение
+BATCH_LIMIT=50
+CLEAN_OUTPUT_ON_START=true
+COMMIT_RESULTS=true
+SCHEDULER_INTERVAL_MINUTES=1
+```
+
+Примечания:
+- Приложение внутри контейнера само подключается к `db` и `minio` по сервисным именам.
+- Пути `OUTPUT_FOLDER` и `MODEL_PATH` внутри образа уже настроены по умолчанию (`/app/src/...`). При необходимости их можно переопределить через `.env`.
+
+### 2) Сборка и запуск
+```
+docker compose build
+docker compose up -d
+```
+
+Проверить логи приложения:
+```
+docker compose logs -f app
+```
+
+Остановить:
+```
+docker compose down
+```
+
+Остановить и очистить данные (PostgreSQL и MinIO):
+```
+docker compose down -v
+```
+
+Открыть MinIO Console: http://localhost:9001 (логин/пароль — из `.env`).

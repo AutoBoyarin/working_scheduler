@@ -24,19 +24,18 @@ from .db import (
 from .storage import _make_client, ensure_bucket, upload_file, build_object_url
 from .utils import download_files
 
-# ========== ПАРАМЕТРЫ ==========
-OUTPUT_FOLDER = r"C:\Code\Python\working_sheduler\src\image_moderator\output"
-MODEL_PATH = r"C:\Code\Python\working_sheduler\src\image_moderator\models\license-plate-finetune-v1l.onnx"
-
-os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+# Параметры путей берутся из конфигурации (см. config.py)
 def run_once(cfg):
+    output_folder = cfg.output_folder
+    model_path = cfg.model_path
+    os.makedirs(output_folder, exist_ok=True)
     # По флагу из .env очищаем выходную папку перед запуском
     if getattr(cfg, "clean_output_on_start", False):
         try:
-            shutil.rmtree(OUTPUT_FOLDER, ignore_errors=True)
+            shutil.rmtree(output_folder, ignore_errors=True)
         except Exception:
             pass
-        os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+        os.makedirs(output_folder, exist_ok=True)
 
     # Инициализация БД и MinIO
     init_db(cfg.db)
@@ -59,15 +58,15 @@ def run_once(cfg):
                 verdict["detections"].extend(moderate_text(description))
 
             # Скачиваем изображения во временную папку
-            tmp_dir = os.path.join(OUTPUT_FOLDER, "tmp", ad_id)
+            tmp_dir = os.path.join(output_folder, "tmp", ad_id)
             local_paths = download_files(image_urls, tmp_dir)
 
             # Запускаем модерацию изображений
             if local_paths:
-                covered_dir = os.path.join(OUTPUT_FOLDER, "images")
+                covered_dir = os.path.join(output_folder, "images")
                 img_dets = moderate_images(
                     image_paths=local_paths,
-                    model_path=MODEL_PATH,
+                    model_path=model_path,
                     output_dir=covered_dir,
                     ad_id=ad_id,
                 )
@@ -144,7 +143,7 @@ def run_once(cfg):
                 pass
 
             # Локальный вывод результата для отладки
-            out_json = os.path.join(OUTPUT_FOLDER, f"verdict_{ad_id}.json")
+            out_json = os.path.join(output_folder, f"verdict_{ad_id}.json")
             with open(out_json, "w", encoding="utf-8") as f:
                 json.dump(verdict, f, ensure_ascii=False, indent=2)
 
