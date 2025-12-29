@@ -2,7 +2,7 @@ apps:
   scheduler:
     image: registry.autoboyarin.site/autoboyarin/working-scheduler:${DOCKER_TAG}
     configs:
-      DB_USER: autoboyarin
+      DB_USER: advertisment
       DB_HOST: "192.168.0.8"
       DB_PORT: "5432"
       DB_NAME: advertisment
