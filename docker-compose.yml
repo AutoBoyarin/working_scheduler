@@ -1,39 +1,68 @@
-version: "3.9"
-
 services:
   app:
     build: .
-    container_name: ws_app
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
     environment:
-      # Database
       DB_HOST: db
       DB_PORT: 5432
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: ${DB_NAME}
-      # MinIO
+      DB_USER: ${DB_USER:-autoboyarin}
+      DB_PASSWORD: ${DB_PASSWORD:-secret}
+      DB_NAME: ${DB_NAME:-advertisement}
       MINIO_INTERNAL_URL: http://minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
-      MINIO_SYSTEM_BUCKET: ${MINIO_SYSTEM_BUCKET}
-      MINIO_CLIENT_BUCKET: ${MINIO_CLIENT_BUCKET}
-      MINIO_CLIENT_PUBLIC_ACCESS: ${MINIO_CLIENT_PUBLIC_ACCESS}
-      # App params
-      BATCH_LIMIT: ${BATCH_LIMIT}
-      CLEAN_OUTPUT_ON_START: ${CLEAN_OUTPUT_ON_START}
-      COMMIT_RESULTS: ${COMMIT_RESULTS}
-      SCHEDULER_INTERVAL_MINUTES: ${SCHEDULER_INTERVAL_MINUTES}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-ROOTNAME}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-CHANGEME123}
+      MINIO_SYSTEM_BUCKET: ${MINIO_SYSTEM_BUCKET:-autoboyarin}
+      MINIO_CLIENT_BUCKET: ${MINIO_CLIENT_BUCKET:-autoboyarin-client}
+      MINIO_CLIENT_PUBLIC_ACCESS: ${MINIO_CLIENT_PUBLIC_ACCESS:-true}
+      BATCH_LIMIT: ${BATCH_LIMIT:-50}
+      CLEAN_OUTPUT_ON_START: ${CLEAN_OUTPUT_ON_START:-true}
+      COMMIT_RESULTS: ${COMMIT_RESULTS:-true}
+      SCHEDULER_INTERVAL_MINUTES: ${SCHEDULER_INTERVAL_MINUTES:-0}
       OUTPUT_FOLDER: /app/src/image_moderator/output
       MODEL_PATH: /app/src/image_moderator/models/license-plate-finetune-v1l.onnx
     volumes:
       - app_output:/app/src/image_moderator/output
     restart: unless-stopped
     env_file:
-      - path: .env
-        required: true
+      - .env
     networks:
       - backend
 
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ${DB_NAME:-advertisement}
+      POSTGRES_USER: ${DB_USER:-autoboyarin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-autoboyarin} -d ${DB_NAME:-advertisement}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    networks:
+      - backend
+
+  minio:
+    image: minio/minio:RELEASE.2023-11-06T22-26-08Z.fips
+    command: server --console-address ":9001" /data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-ROOTNAME}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-CHANGEME123}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - backend
 
 volumes:
   pg_data:
@@ -42,4 +71,3 @@ volumes:
 
 networks:
   backend:
-    external: true
